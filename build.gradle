@@ -1,0 +1,67 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+group = 'com.tridimensity'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            
+            pom {
+                name = 'Tridimensity'
+                description = 'A Java library for loading and handling Blockbench models for Minecraft Display Entities'
+                url = 'https://github.com/DarkBladeDev/Tridimensity'
+                
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+                
+                developers {
+                    developer {
+                        id = 'developer'
+                        name = 'Tridimensity Developer'
+                    }
+                }
+            }
+        }
+    }
+}
+
+dependencies {
+    // JSON Processing
+    implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // Math Library (Matrices, Vectors)
+    implementation 'org.joml:joml:1.10.5'
+    
+    // Logging API (SLF4J)
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+
+    // Testing
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.slf4j:slf4j-simple:2.0.9' // Logger implementation for tests
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
