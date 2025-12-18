@@ -15,12 +15,9 @@ public class ModelCube {
     private final UUID uuid;
     private final Vector3f from;
     private final Vector3f to;
-    // Map of face direction (north, south, etc.) to UV data. 
-    // Keeping it generic for now as specific UV logic wasn't detailed, 
-    // but the structure is needed.
-    private final Map<String, Object> faces; 
+    private final Map<String, ModelFace> faces; 
 
-    public ModelCube(UUID uuid, Vector3f from, Vector3f to, Map<String, Object> faces) {
+    public ModelCube(UUID uuid, Vector3f from, Vector3f to, Map<String, ModelFace> faces) {
         this.uuid = uuid;
         this.from = from;
         this.to = to;
@@ -38,8 +35,22 @@ public class ModelCube {
     public Vector3f getTo() {
         return new Vector3f(to);
     }
+    
+    /**
+     * @return The size of the cube (to - from).
+     */
+    public Vector3f getSize() {
+        return new Vector3f(to).sub(from);
+    }
 
-    public Map<String, Object> getFaces() {
+    /**
+     * @return The center point of the cube.
+     */
+    public Vector3f getCenter() {
+        return new Vector3f(from).add(to).mul(0.5f);
+    }
+
+    public Map<String, ModelFace> getFaces() {
         return faces;
     }
 

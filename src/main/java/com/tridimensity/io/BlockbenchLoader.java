@@ -9,6 +9,7 @@ import com.tridimensity.exception.ModelParseException;
 import com.tridimensity.io.dto.ElementDto;
 import com.tridimensity.model.Model;
 import com.tridimensity.model.ModelCube;
+import com.tridimensity.model.ModelFace;
 import com.tridimensity.model.ModelNode;
 import org.joml.Vector3f;
 
@@ -62,11 +63,22 @@ public class BlockbenchLoader {
                 throw new ModelParseException("Duplicate element UUID: " + uuid);
             }
             
+            Map<String, ModelFace> faces = new HashMap<>();
+            if (dto.faces != null) {
+                for (Map.Entry<String, ElementDto.FaceDto> entry : dto.faces.entrySet()) {
+                    ElementDto.FaceDto f = entry.getValue();
+                    String texture = f.texture != null ? f.texture : "";
+                    // Blockbench sometimes uses null for texture if not set
+                    
+                    faces.put(entry.getKey(), new ModelFace(f.uv, texture, f.rotation));
+                }
+            }
+            
             ModelCube cube = new ModelCube(
                 uuid,
                 new Vector3f(dto.from[0], dto.from[1], dto.from[2]),
                 new Vector3f(dto.to[0], dto.to[1], dto.to[2]),
-                dto.faces
+                faces
             );
             elementMap.put(uuid, cube);
         }

@@ -37,8 +37,8 @@ publishing {
                 
                 developers {
                     developer {
-                        id = 'developer'
-                        name = 'Tridimensity Developer'
+                        id = 'DarkBladeDev'
+                        name = 'DarkBladeDev'
                     }
                 }
             }

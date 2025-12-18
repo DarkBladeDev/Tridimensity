@@ -6,5 +6,11 @@ public class ElementDto {
     public String uuid;
     public float[] from;
     public float[] to;
-    public Map<String, Object> faces;
+    public Map<String, FaceDto> faces;
+    
+    public static class FaceDto {
+        public float[] uv;
+        public String texture;
+        public int rotation;
+    }
 }
