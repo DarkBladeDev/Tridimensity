@@ -34,64 +34,76 @@ public class ModelInstance {
         Map<ModelNode, Matrix4f> results = new HashMap<>();
         
         // Identity for the "world" (or root parent)
-        Matrix4f rootTransform = new Matrix4f().identity();
+        Matrix4f rootBoneMatrix = new Matrix4f().identity();
+        Vector3f rootOrigin = new Vector3f(0, 0, 0);
 
         for (ModelNode root : model.getRoots()) {
-            computeRecursive(root, rootTransform, results);
+            computeRecursive(root, rootBoneMatrix, rootOrigin, results);
         }
 
         return results;
     }
 
-    private void computeRecursive(ModelNode node, Matrix4f parentMatrix, Map<ModelNode, Matrix4f> results) {
-        // 1. Build Local Matrix
-        Matrix4f local = new Matrix4f();
-
+    /**
+     * @param parentBoneMatrix The accumulated transformation of the parent bone (without the T(-pivot) for geometry).
+     * @param parentOrigin The pivot point of the parent in global Bind Pose coordinates.
+     */
+    private void computeRecursive(ModelNode node, Matrix4f parentBoneMatrix, Vector3f parentOrigin, Map<ModelNode, Matrix4f> results) {
         // Data from node
-        Vector3f pos = node.getPosition();
-        Vector3f piv = node.getOrigin();
+        Vector3f pos = node.getPosition(); // Animation/Offset position
+        Vector3f piv = node.getOrigin();   // Pivot point (Global Bind Pose)
         Vector3f rot = node.getRotation();
         Vector3f scl = node.getScale();
 
-        // Convert pixels to blocks
-        float px = pos.x * SCALE_FACTOR;
-        float py = pos.y * SCALE_FACTOR;
-        float pz = pos.z * SCALE_FACTOR;
+        // Regla 1: origin está en espacio del padre (transformado).
+        // PERO en Blockbench, 'origin' se define en coordenadas globales del editor (Bind Pose).
+        // La jerarquía se construye con "offsets".
+        // Offset = ChildPivot - ParentPivot + Position.
+        // Esto es correcto para "Bone Parenting".
+        
+        // Calculate Relative Offset: (ChildPivot - ParentPivot) + Position
+        Vector3f offset = new Vector3f(piv).sub(parentOrigin).add(pos);
 
-        float pivX = piv.x * SCALE_FACTOR;
-        float pivY = piv.y * SCALE_FACTOR;
-        float pivZ = piv.z * SCALE_FACTOR;
-
-        // T(position)
-        local.translate(px, py, pz);
-
-        // T(pivot)
-        local.translate(pivX, pivY, pivZ);
-
+        // Convert to blocks (Regla 7: Normalización previa)
+        offset.mul(SCALE_FACTOR);
+        
+        // Build Bone Matrix
+        // M_bone = M_parent_bone * T(offset) * R(rot) * S(scale)
+        // Regla 5: Orden T -> R -> S. (Aplicado aquí secuencialmente).
+        Matrix4f boneMatrix = new Matrix4f(parentBoneMatrix);
+        
+        // T(offset)
+        boneMatrix.translate(offset);
+        
         // R(rotation) - Euler XYZ in degrees
-        // JOML rotateXYZ takes radians
-        local.rotateXYZ(
+        // Regla 4: Rotaciones siempre locales. (Aplicado sobre la matriz ósea actual).
+        boneMatrix.rotateXYZ(
             (float) Math.toRadians(rot.x),
-            (float) Math.toRadians(rot.y),
+            (float) Math.toRadians(-rot.y), // Invert Y to match Minecraft/Blockbench coordinate system (X->Z)
             (float) Math.toRadians(rot.z)
         );
-
+        
         // S(scale)
-        local.scale(scl);
+        boneMatrix.scale(scl);
 
-        // T(-pivot)
-        local.translate(-pivX, -pivY, -pivZ);
+        // Calculate Final Render Matrix for Geometry
+        // M_render = M_bone * T(-ChildPivot)
+        // Regla 2 y 3: Pivot no es posición y es invariante.
+        // T(-ChildPivot) compensa el hecho de que la geometría está definida en coordenadas globales.
+        // Al restar el pivote, llevamos la geometría al origen local del hueso.
+        
+        Matrix4f renderMatrix = new Matrix4f(boneMatrix);
+        
+        // T(-ChildPivot) scaled
+        Vector3f negPivot = new Vector3f(piv).mul(-SCALE_FACTOR);
+        renderMatrix.translate(negPivot);
 
-        // 2. Combine with Parent
-        // M_world = M_parent * M_local
-        Matrix4f world = new Matrix4f(parentMatrix).mul(local);
+        // Store result
+        results.put(node, renderMatrix);
 
-        // 3. Store result
-        results.put(node, world);
-
-        // 4. Recurse
+        // Recurse using the Bone Matrix
         for (ModelNode child : node.getChildren()) {
-            computeRecursive(child, world, results);
+            computeRecursive(child, boneMatrix, piv, results);
         }
     }
 }

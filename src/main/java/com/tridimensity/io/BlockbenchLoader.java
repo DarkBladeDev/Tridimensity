@@ -6,12 +6,18 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.tridimensity.exception.ModelParseException;
+import com.tridimensity.io.ast.ModelAst;
 import com.tridimensity.io.dto.ElementDto;
+import com.tridimensity.io.fix.ElementRotationFixer;
+import com.tridimensity.io.fix.FixReport;
+import com.tridimensity.io.options.ParserOptions;
 import com.tridimensity.model.Model;
 import com.tridimensity.model.ModelCube;
 import com.tridimensity.model.ModelFace;
 import com.tridimensity.model.ModelNode;
 import org.joml.Vector3f;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -25,6 +31,7 @@ import java.util.UUID;
 public class BlockbenchLoader {
 
     private static final Gson gson = new Gson();
+    private static final Logger log = LoggerFactory.getLogger(BlockbenchLoader.class);
 
     /**
      * Loads a Blockbench model from an InputStream.
@@ -34,9 +41,15 @@ public class BlockbenchLoader {
      * @throws ModelParseException If the model is invalid.
      */
     public static Model load(InputStream inputStream) {
+        return load(inputStream, ParserOptions.strict());
+    }
+
+    public static Model load(InputStream inputStream, ParserOptions options) {
         try {
-            JsonObject root = JsonParser.parseReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8)).getAsJsonObject();
-            return parse(root);
+            String raw = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            JsonObject root = JsonParser.parseString(raw).getAsJsonObject();
+            prepare(root, options, raw);
+            return parse(root, raw);
         } catch (Exception e) {
             if (e instanceof ModelParseException) {
                 throw (ModelParseException) e;
@@ -45,7 +58,20 @@ public class BlockbenchLoader {
         }
     }
 
-    private static Model parse(JsonObject root) {
+    private static void prepare(JsonObject root, ParserOptions options, String raw) {
+        if (options != null && options.isAutoFixTransforms()) {
+            FixReport report = new FixReport();
+            ModelAst ast = ModelAst.fromJson(root, raw);
+            new com.tridimensity.io.fix.ElementOriginFixer().apply(ast, report);
+            new ElementRotationFixer().apply(ast, report);
+            ast.validateNoElementRotations();
+            for (String w : report.warnings()) {
+                log.warn(w);
+            }
+        }
+    }
+
+    private static Model parse(JsonObject root, String raw) {
         // 1. Parse Elements (Cubes)
         if (!root.has("elements")) {
             throw new ModelParseException("Missing 'elements' array");
@@ -56,6 +82,23 @@ public class BlockbenchLoader {
         
         for (JsonElement el : elementsArray) {
             ElementDto dto = gson.fromJson(el, ElementDto.class);
+            JsonObject elObj = el.getAsJsonObject();
+            if (elObj.has("origin")) {
+                int line = dto.uuid != null ? ModelAst.fromJson(root, raw).lineOfUuid(dto.uuid) : -1;
+                throw new ModelParseException("Element-level origin is not supported; use group origin", line, dto.uuid != null ? "/elements/" + dto.uuid : null);
+            }
+            if (elObj.has("rotation")) {
+                JsonArray ra = elObj.getAsJsonArray("rotation");
+                if (ra != null && ra.size() == 3) {
+                    float rx = ra.get(0).getAsFloat();
+                    float ry = ra.get(1).getAsFloat();
+                    float rz = ra.get(2).getAsFloat();
+                    if (Math.abs(rx) > 1e-6f || Math.abs(ry) > 1e-6f || Math.abs(rz) > 1e-6f) {
+                        int line = dto.uuid != null ? ModelAst.fromJson(root, raw).lineOfUuid(dto.uuid) : -1;
+                        throw new ModelParseException("Element-level transforms are not supported; use group rotation", line, dto.uuid != null ? "/elements/" + dto.uuid : null);
+                    }
+                }
+            }
             validateElement(dto);
             
             UUID uuid = UUID.fromString(dto.uuid);

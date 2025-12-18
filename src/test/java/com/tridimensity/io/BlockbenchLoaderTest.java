@@ -15,7 +15,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class BlockbenchLoaderTest {
+class BlockbenchLoaderTest {    
 
     private Model load(String json) {
         return BlockbenchLoader.load(new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
@@ -88,6 +88,160 @@ class BlockbenchLoaderTest {
     }
 
     @Test
+    void testElementRotationFails() {
+        String json = """
+            {
+                "elements": [
+                    {
+                        "uuid": "11111111-1111-1111-1111-111111111111",
+                        "from": [0,0,0],
+                        "to": [16,16,16],
+                        "faces": {},
+                        "rotation": [0, 90, 0]
+                    }
+                ],
+                "outliner": [
+                    {
+                        "name": "root",
+                        "origin": [0,0,0],
+                        "children": ["11111111-1111-1111-1111-111111111111"]
+                    }
+                ]
+            }
+            """;
+        assertThrows(ModelParseException.class, () -> load(json));
+    }
+
+    @Test
+    void testElementOriginFails() {
+        String json = """
+            {
+                "elements": [
+                    {
+                        "uuid": "22222222-2222-2222-2222-222222222222",
+                        "from": [0,0,0],
+                        "to": [16,16,16],
+                        "faces": {},
+                        "origin": [8, 8, 8]
+                    }
+                ],
+                "outliner": [
+                    {
+                        "name": "root",
+                        "origin": [0,0,0],
+                        "children": ["22222222-2222-2222-2222-222222222222"]
+                    }
+                ]
+            }
+            """;
+        // En modo auto-fix, un origin sin rotación se limpia
+        var options = new com.tridimensity.io.options.ParserOptions(true);
+        Model model = BlockbenchLoader.load(new java.io.ByteArrayInputStream(json.getBytes(java.nio.charset.StandardCharsets.UTF_8)), options);
+        assertNotNull(model);
+    }
+
+    @Test
+    void testElementRotationAutoFix() {
+        String json = """
+            {
+                "elements": [
+                    {
+                        "uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                        "name": "box",
+                        "from": [0,0,0],
+                        "to": [16,16,16],
+                        "faces": {},
+                        "rotation": [0, 90, 0]
+                    }
+                ],
+                "outliner": [
+                    {
+                        "name": "group",
+                        "origin": [0,0,0],
+                        "rotation": [0, 45, 0],
+                        "children": ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]
+                    }
+                ]
+            }
+            """;
+
+        var options = new com.tridimensity.io.options.ParserOptions(true);
+        Model model = BlockbenchLoader.load(new java.io.ByteArrayInputStream(json.getBytes(java.nio.charset.StandardCharsets.UTF_8)), options);
+        assertNotNull(model);
+        assertEquals(1, model.getRoots().size());
+        ModelNode group = model.getRoots().get(0);
+        // group.rotation should be 45 + 90 = 135
+        assertEquals(135.0f, group.getRotation().y, 0.0001f);
+        // group.origin should equal element origin
+        assertEquals(0.0f, group.getOrigin().x, 0.0001f);
+        assertEquals(0.0f, group.getOrigin().y, 0.0001f);
+        assertEquals(0.0f, group.getOrigin().z, 0.0001f);
+    }
+
+    @Test
+    void testElementRotationNoParentFails() {
+        String json = """
+            {
+                "elements": [
+                    {
+                        "uuid": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                        "name": "lonely",
+                        "from": [0,0,0],
+                        "to": [16,16,16],
+                        "faces": {},
+                        "rotation": [0, 90, 0]
+                    }
+                ],
+                "outliner": []
+            }
+            """;
+
+        var options = new com.tridimensity.io.options.ParserOptions(true);
+        assertThrows(ModelParseException.class, () -> BlockbenchLoader.load(new java.io.ByteArrayInputStream(json.getBytes(java.nio.charset.StandardCharsets.UTF_8)), options));
+    }
+
+    @Test
+    void testElementOriginAutoFixConflict() {
+        String json = """
+            {
+                "elements": [
+                    {
+                        "uuid": "c1c1c1c1-c1c1-c1c1-c1c1-c1c1c1c1c1c1",
+                        "name": "a",
+                        "from": [0,0,0],
+                        "to": [16,16,16],
+                        "faces": {},
+                        "rotation": [0, 90, 0],
+                        "origin": [0, 0, 0]
+                    },
+                    {
+                        "uuid": "d2d2d2d2-d2d2-d2d2-d2d2-d2d2d2d2d2d2",
+                        "name": "b",
+                        "from": [0,0,0],
+                        "to": [16,16,16],
+                        "faces": {},
+                        "rotation": [0, 45, 0],
+                        "origin": [1, 0, 0]
+                    }
+                ],
+                "outliner": [
+                    {
+                        "name": "group",
+                        "origin": [0,0,0],
+                        "children": [
+                            "c1c1c1c1-c1c1-c1c1-c1c1-c1c1c1c1c1c1",
+                            "d2d2d2d2-d2d2-d2d2-d2d2-d2d2d2d2d2d2"
+                        ]
+                    }
+                ]
+            }
+            """;
+
+        var options = new com.tridimensity.io.options.ParserOptions(true);
+        assertThrows(ModelParseException.class, () -> BlockbenchLoader.load(new java.io.ByteArrayInputStream(json.getBytes(java.nio.charset.StandardCharsets.UTF_8)), options));
+    }
+
+    @Test
     void testTransformMath() {
         // Test a node shifted by 16 units (1 block) on X
         String json = """
@@ -123,14 +277,9 @@ class BlockbenchLoaderTest {
     @Test
     void testPivotMath() {
         // Pivot at 8,8,8 (0.5, 0.5, 0.5). Rotate 90 deg Y.
-        // T(pos=0) * T(piv) * R(90) * T(-piv)
-        // Point (0,0,0) should rotate around (0.5, 0.5, 0.5)
-        // Wait, the matrix applies to the CONTENT of the node (children/cubes).
-        // If we have a cube at (0,0,0) inside this node.
-        // GlobalPos = M * LocalPos
-        // Let's check the matrix translation.
-        // M = I * T(0.5) * R * T(-0.5)
-        // This matrix represents the transform of the coordinate system.
+        // Geometry at 0,0,0 (global).
+        // Bone Matrix should be at 0.5, 0.5, 0.5.
+        // Render Matrix should effectively rotate geometry around 0.5, 0.5, 0.5.
         
         String json = """
             {
@@ -150,14 +299,56 @@ class BlockbenchLoaderTest {
         ModelInstance instance = model.instantiate();
         Matrix4f mat = instance.computeWorldTransforms().get(model.getRoots().get(0));
         
-        // Let's verify by transforming a point.
-        // The pivot is at center (0.5, 0.5, 0.5).
-        // If we transform the pivot point itself, it should remain at (0.5, 0.5, 0.5)
+        // Test Point: Pivot (0.5, 0.5, 0.5).
+        // Since we rotate around the pivot, the pivot point itself should NOT move in world space.
+        // M_render = M_bone * T(-Pivot)
+        // P_world = M_render * P_global
+        // P_global = Pivot (0.5, 0.5, 0.5)
+        // P_local = T(-Pivot) * Pivot = 0,0,0
+        // P_final = M_bone * 0 = BonePosition.
+        // BonePosition for root = T(Pivot - 0) = T(Pivot).
+        // So P_final = Pivot. Correct.
+        
         Vector3f point = new Vector3f(0.5f, 0.5f, 0.5f);
         mat.transformPosition(point);
         
         assertEquals(0.5f, point.x, 0.0001f);
         assertEquals(0.5f, point.y, 0.0001f);
         assertEquals(0.5f, point.z, 0.0001f);
+        
+        // Test Point: (0,0,0) corner.
+        // Relative to pivot (0.5, 0.5, 0.5), it is at (-0.5, -0.5, -0.5).
+        // Rotate 90 Y -> (-0.5, -0.5, 0.5) approx. (X becomes Z, Z becomes -X... wait. Rot Y: X->Z, Z->-X? No. Z->X, X->-Z?)
+        // Let's use JOML logic.
+        // Rot Y 90: (+X -> -Z).
+        // Point relative: (-0.5, -0.5, -0.5).
+        // Rotated: (-0.5, -0.5, 0.5).
+        // Add Pivot back: (0, 0, 1).
+        
+        Vector3f corner = new Vector3f(0.0f, 0.0f, 0.0f);
+        mat.transformPosition(corner);
+        
+        // Expected: (1, 0, 0) because Rotation is X->Z (90 deg).
+        // Corner (0,0,0) is at RelX -0.5.
+        // RelX -0.5 -> RelZ -0.5.
+        // Pivot (0.5, 0.5, 0.5) + Rel(0.5, -0.5, -0.5) -> Wait.
+        // X' = -Z? No. X->Z.
+        // If X->Z, Z->-X.
+        // RelZ -0.5 -> Rel -X 0.5.
+        // RelX -0.5 -> Rel Z -0.5.
+        // Result (0.5, -0.5, -0.5).
+        // Pivot (0.5, 0.5, 0.5) + Result -> (1.0, 0.0, 0.0).
+        
+        assertEquals(1.0f, corner.x, 0.0001f);
+        assertEquals(0.0f, corner.y, 0.0001f);
+        assertEquals(0.0f, corner.z, 0.0001f);
+    }
+
+    @Test
+    void testLoadFromFile() throws Exception {
+        try (var stream = getClass().getResourceAsStream("/models/default.bbmodel")) {
+            assertNotNull(stream, "Test resource " + "/models/default.bbmodel" + " not found");
+            assertThrows(ModelParseException.class, () -> BlockbenchLoader.load(stream));
+        }
     }
 }

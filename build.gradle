@@ -24,7 +24,7 @@ publishing {
             from components.java
             
             pom {
-                name = 'Tridimensity'
+                name = 'tridimensity'
                 description = 'A Java library for loading and handling Blockbench models for Minecraft Display Entities'
                 url = 'https://github.com/DarkBladeDev/Tridimensity'
                 

@@ -1,0 +1,136 @@
+{
+  "meta": {
+    "format_version": "5.0",
+    "model_format": "java_block",
+    "box_uv": false
+  },
+  "name": "default_L (1)",
+  "parent": "",
+  "java_block_version": "1.9.0",
+  "ambientocclusion": true,
+  "front_gui_light": false,
+  "visible_box": [1, 1, 0],
+  "variable_placeholders": "",
+  "variable_placeholder_buttons": [],
+  "unhandled_root_fields": {
+    "format_version": "1.9.0"
+  },
+  "resolution": {
+    "width": 16,
+    "height": 16
+  },
+  "elements": [
+    {
+      "name": "BLACK_CONCRETE",
+      "box_uv": false,
+      "render_order": "default",
+      "rescale": false,
+      "locked": false,
+      "shade": true,
+      "light_emission": 0,
+      "allow_mirror_modeling": true,
+      "from": [6.7, 0, 4.75],
+      "to": [9.7, 2, 14.75],
+      "autouv": 0,
+      "color": 1,
+      "origin": [8.2, 1, 9.75],
+      "faces": {
+        "north": {"uv": [0, 0, 2, 2], "rotation": 180, "texture": 0},
+        "east": {"uv": [0, 0, 7, 2], "rotation": 180, "texture": 0},
+        "south": {"uv": [0, 0, 2, 2], "rotation": 180, "texture": 0},
+        "west": {"uv": [0, 0, 7, 2], "rotation": 180, "texture": 0},
+        "up": {"uv": [0, 0, 2, 7], "rotation": 180, "texture": 0},
+        "down": {"uv": [0, 0, 2, 7], "rotation": 180, "texture": 0}
+      },
+      "type": "cube",
+      "uuid": "6dfbf331-7cc6-b5d0-8eab-ed2b8de92c35"
+    },
+    {
+      "name": "BLUE_CONCRETE",
+      "box_uv": false,
+      "render_order": "default",
+      "rescale": false,
+      "locked": false,
+      "shade": true,
+      "light_emission": 0,
+      "allow_mirror_modeling": true,
+      "from": [6.72735, 0.3, 1.92963],
+      "to": [16.47735, 1.8, 4.92963],
+      "autouv": 0,
+      "color": 9,
+      "origin": [8.24359, 1.05, 3.60641],
+      "faces": {
+        "north": {"uv": [0, 0, 6, 1.5], "texture": 1},
+        "east": {"uv": [0, 0, 2, 1.5], "texture": 1},
+        "south": {"uv": [0, 0, 6, 1.5], "texture": 1},
+        "west": {"uv": [0, 0, 2, 1.5], "texture": 1},
+        "up": {"uv": [0, 0, 2, 6], "rotation": 90, "texture": 1},
+        "down": {"uv": [0, 0, 2, 6], "rotation": 270, "texture": 1}
+      },
+      "type": "cube",
+      "uuid": "6387042f-6a66-4751-d02c-8fc340e95ac6"
+    },
+    {
+      "name": "ORANGE_CONCRETE",
+      "box_uv": false,
+      "render_order": "default",
+      "rescale": false,
+      "locked": false,
+      "shade": true,
+      "light_emission": 0,
+      "allow_mirror_modeling": true,
+      "from": [4.73579, 0.3, 4.31992],
+      "to": [7.73579, 1.8, 11.56992],
+      "autouv": 0,
+      "color": 2,
+      "origin": [6.41257, 1.05, 5.64682],
+      "faces": {
+        "north": {"uv": [2, 0, 0, 1.5], "texture": 2},
+        "east": {"uv": [6, 0, 0, 1.5], "texture": 2},
+        "south": {"uv": [2, 0, 0, 1.5], "texture": 2},
+        "west": {"uv": [6, 0, 0, 1.5], "texture": 2},
+        "up": {"uv": [2, 0, 0, 6], "rotation": 180, "texture": 2},
+        "down": {"uv": [2, 0, 0, 6], "rotation": 180, "texture": 2}
+      },
+      "type": "cube",
+      "uuid": "bd74e13c-377a-2ffb-febd-a647e3d379ca"
+    }
+  ],
+  "groups": [
+    {
+      "uuid": "9710d55f-25a2-2ee8-52bd-43ffd727c5b3",
+      "origin": [7.5, 1.25, 1.08839],
+      "rotation": [0, 0, 0],
+      "name": "base",
+      "children": []
+    },
+    {
+      "uuid": "f0394de1-ef61-6740-937d-cb4d03b4b3fa",
+      "origin": [0.24359, 1.05, -3.39359],
+      "rotation": [0, -45, 0],
+      "name": "p1",
+      "children": []
+    },
+    {
+      "uuid": "3d929b05-d1ae-156e-675a-a6add3612424",
+      "origin": [-1.58743, 1.05, -1.35318],
+      "rotation": [0, -90, 0],
+      "name": "p2",
+      "children": []
+    }
+  ],
+  "outliner": [
+    {
+      "uuid": "9710d55f-25a2-2ee8-52bd-43ffd727c5b3",
+      "children": ["6dfbf331-7cc6-b5d0-8eab-ed2b8de92c35"]
+    },
+    {
+      "uuid": "f0394de1-ef61-6740-937d-cb4d03b4b3fa",
+      "children": ["6387042f-6a66-4751-d02c-8fc340e95ac6"]
+    },
+    {
+      "uuid": "3d929b05-d1ae-156e-675a-a6add3612424",
+      "children": ["bd74e13c-377a-2ffb-febd-a647e3d379ca"]
+    }
+  ]
+}
