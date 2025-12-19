@@ -22,70 +22,81 @@ public class ModelInstance {
     /**
      * Computes the world transformation matrices for all nodes in the model.
      * 
-     * Formula per node:
-     * M_local = T(pos) * T(pivot) * R(rot) * S(scale) * T(-pivot)
-     * M_world = M_parent * M_local
+     * Transformation hierarchy:
+     * - Each node has a pivot point (origin) in global Blockbench space
+     * - Child offset = (child_pivot - parent_pivot) + position_offset
+     * - Rotation happens around the node's own pivot (implicit local origin)
+     * - Scale is applied after rotation
      * 
-     * All translation units (pos, pivot) are converted from pixels to blocks (1/16).
+     * Formula per node:
+     * M_local = T(offset) * R(rotation) * S(scale)
+     * M_world = M_parent * M_local
      * 
      * @return A map of Node -> World Matrix
      */
     public Map<ModelNode, Matrix4f> computeWorldTransforms() {
         Map<ModelNode, Matrix4f> results = new HashMap<>();
         
-        // Identity for the "world" (or root parent)
-        Matrix4f rootBoneMatrix = new Matrix4f().identity();
-        Vector3f rootOrigin = new Vector3f(0, 0, 0);
+        // Identity matrix for root level
+        Matrix4f identityMatrix = new Matrix4f().identity();
+        Vector3f worldOrigin = new Vector3f(0, 0, 0);
 
         for (ModelNode root : model.getRoots()) {
-            computeRecursive(root, rootBoneMatrix, rootOrigin, results);
+            computeRecursive(root, identityMatrix, worldOrigin, results);
         }
 
         return results;
     }
 
     /**
-     * @param parentBoneMatrix The accumulated transformation of the parent bone (without the T(-pivot) for geometry).
-     * @param parentOrigin The pivot point of the parent in global Bind Pose coordinates.
+     * Recursively computes world matrices for a node and its children.
+     * 
+     * @param node The current node
+     * @param parentMatrix The accumulated world matrix of the parent
+     * @param parentPivot The pivot point of the parent in Blockbench global space
+     * @param results Output map to store computed matrices
      */
-    private void computeRecursive(ModelNode node, Matrix4f parentBoneMatrix, Vector3f parentOrigin, Map<ModelNode, Matrix4f> results) {
-        // Data from node
-        Vector3f pos = node.getPosition(); // Animation/Offset position
-        Vector3f piv = node.getOrigin();   // Pivot point (Global Bind Pose)
-        Vector3f rot = node.getRotation();
-        Vector3f scl = node.getScale();
+    private void computeRecursive(
+        ModelNode node, 
+        Matrix4f parentMatrix, 
+        Vector3f parentPivot, 
+        Map<ModelNode, Matrix4f> results
+    ) {
+        // Get node properties
+        Vector3f position = node.getPosition();  // Animation/offset position
+        Vector3f pivot = node.getOrigin();       // Pivot point (global Blockbench coords)
+        Vector3f rotation = node.getRotation();  // Euler angles in degrees
+        Vector3f scale = node.getScale();        // Scale factors
 
-        // Regla 1: origin está en espacio del padre (transformado).
-        // PERO en Blockbench, 'origin' se define en coordenadas globales del editor (Bind Pose).
-        // La jerarquía se construye con "offsets".
-        // Offset = ChildPivot - ParentPivot + Position.
-        // Esto es correcto para "Bone Parenting".
+        // STEP 1: Calculate offset from parent pivot to this node's pivot
+        // offset = (child_pivot - parent_pivot) + position
+        Vector3f offset = new Vector3f(pivot)
+            .sub(parentPivot)
+            .add(position);
         
-        // Calculate Relative Offset: (ChildPivot - ParentPivot) + Position
-        Vector3f offset = new Vector3f(piv).sub(parentOrigin).add(pos);
-
-        // Convert to blocks (Regla 7: Normalización previa)
+        // Convert from Blockbench pixels to Minecraft blocks
         offset.mul(SCALE_FACTOR);
-        
-        // Construcción correcta con pivot centrando la rotación
-        Matrix4f boneMatrix = new Matrix4f(parentBoneMatrix);
-        boneMatrix.translate(offset);
-        Vector3f pivotScaled = new Vector3f(piv).mul(SCALE_FACTOR);
-        boneMatrix.translate(pivotScaled);
-        boneMatrix.rotateXYZ(
-            (float) Math.toRadians(rot.x),
-            (float) Math.toRadians(-rot.y),
-            (float) Math.toRadians(rot.z)
+
+        // STEP 2: Build world transformation matrix with pivot-centered rotation
+        Vector3f pivotScaled = new Vector3f(pivot).mul(SCALE_FACTOR);
+        Matrix4f worldMatrix = new Matrix4f(parentMatrix);
+        worldMatrix.translate(offset);
+        worldMatrix.translate(pivotScaled);
+        worldMatrix.rotateXYZ(
+            (float) Math.toRadians(rotation.x),
+            (float) Math.toRadians(-rotation.y),
+            (float) Math.toRadians(rotation.z)
         );
-        boneMatrix.scale(scl);
-        boneMatrix.translate(new Vector3f(pivotScaled).mul(-1f));
+        worldMatrix.scale(scale);
+        worldMatrix.translate(new Vector3f(pivotScaled).mul(-1f));
+        
+        // Store result
+        results.put(node, worldMatrix);
 
-        // Store final node matrix
-        results.put(node, boneMatrix);
-
-        // Recurse using the Bone Matrix
+        // STEP 4: Recurse to children
+        // Pass this node's world matrix and pivot as the new parent context
         for (ModelNode child : node.getChildren()) {
-            computeRecursive(child, boneMatrix, piv, results);
+            computeRecursive(child, worldMatrix, pivot, results);
         }
     }
 }

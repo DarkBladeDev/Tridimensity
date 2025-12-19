@@ -20,7 +20,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -73,6 +72,7 @@ public class BlockbenchLoader {
 
     private static Model parse(JsonObject root, String raw) {
         ModelAst ast = ModelAst.fromJson(root, raw);
+        
         // 1. Parse Elements (Cubes)
         if (!root.has("elements")) {
             throw new ModelParseException("Missing 'elements' array", ast.lineOfKey("elements"), "/elements");
@@ -84,10 +84,12 @@ public class BlockbenchLoader {
         for (JsonElement el : elementsArray) {
             ElementDto dto = gson.fromJson(el, ElementDto.class);
             JsonObject elObj = el.getAsJsonObject();
+            
             if (elObj.has("origin")) {
                 int line = dto.uuid != null ? ast.lineOfUuid(dto.uuid) : -1;
                 throw new ModelParseException("Element-level origin is not supported; use group origin", line, dto.uuid != null ? "/elements/" + dto.uuid : null);
             }
+            
             if (elObj.has("rotation")) {
                 JsonArray ra = elObj.getAsJsonArray("rotation");
                 if (ra != null && ra.size() == 3) {
@@ -100,6 +102,7 @@ public class BlockbenchLoader {
                     }
                 }
             }
+            
             validateElement(dto, ast);
             
             UUID uuid = UUID.fromString(dto.uuid);
@@ -108,13 +111,14 @@ public class BlockbenchLoader {
                 throw new ModelParseException("Duplicate element UUID: " + uuid, line, "/elements/" + uuid);
             }
             
+            Vector3f from = new Vector3f(dto.from[0], dto.from[1], dto.from[2]);
+            Vector3f to = new Vector3f(dto.to[0], dto.to[1], dto.to[2]);
+            
             Map<String, ModelFace> faces = new HashMap<>();
             if (dto.faces != null) {
                 for (Map.Entry<String, ElementDto.FaceDto> entry : dto.faces.entrySet()) {
                     ElementDto.FaceDto f = entry.getValue();
                     String texture = f.texture != null ? f.texture : "";
-                    // Blockbench sometimes uses null for texture if not set
-                    
                     faces.put(entry.getKey(), new ModelFace(f.uv, texture, f.rotation));
                 }
             }
@@ -122,8 +126,8 @@ public class BlockbenchLoader {
             ModelCube cube = new ModelCube(
                 uuid,
                 dto.name,
-                new Vector3f(dto.from[0], dto.from[1], dto.from[2]),
-                new Vector3f(dto.to[0], dto.to[1], dto.to[2]),
+                from,
+                to,
                 faces
             );
             elementMap.put(uuid, cube);
@@ -144,7 +148,7 @@ public class BlockbenchLoader {
                 ModelNode node = parseNode(nodeJson.getAsJsonObject(), elementMap, usedCubes, ast);
                 model.addRoot(node);
             } else if (nodeJson.isJsonPrimitive() && nodeJson.getAsJsonPrimitive().isString()) {
-                // Allow root entries that are direct element UUIDs; create a synthetic container node
+                // Allow root entries that are direct element UUIDs
                 String uuidStr = nodeJson.getAsString();
                 UUID uuid;
                 try {
@@ -159,8 +163,15 @@ public class BlockbenchLoader {
                     throw new ModelParseException("Reference to nonexistent cube UUID: " + uuid, line, "/outliner/" + uuidStr);
                 }
 
-                ModelNode synthetic = new ModelNode("<outliner-root>", new org.joml.Vector3f(0,0,0), new org.joml.Vector3f(0,0,0), new org.joml.Vector3f(0,0,0), new org.joml.Vector3f(1,1,1));
+                ModelNode synthetic = new ModelNode(
+                    "<outliner-root>", 
+                    new Vector3f(0, 0, 0),
+                    new Vector3f(0, 0, 0), 
+                    new Vector3f(0, 0, 0), 
+                    new Vector3f(1, 1, 1)
+                );
                 synthetic.addCube(elementMap.get(uuid));
+                
                 if (usedCubes.contains(uuid)) {
                     int line = ast.lineOfUuid(uuidStr);
                     throw new ModelParseException("Cube referenced more than once: " + uuid, line, "/outliner/" + uuidStr);
@@ -175,21 +186,14 @@ public class BlockbenchLoader {
         if (model.getRoots().isEmpty()) {
             throw new ModelParseException("Model has no root nodes", ast.lineOfKey("outliner"), "/outliner");
         }
-
-        // 3. Validate all cubes are used exactly once (Implied by strict logic, but let's check strict containment)
-        // The prompt says: "Un cubo solo puede existir en un nodo. Violación -> error."
-        // We checked duplicates during insertion into 'usedCubes'.
-        // We can optionally check if there are unused cubes, but the prompt doesn't strictly forbid unused cubes, 
-        // only that a referenced cube must exist and be used once. 
-        // However, standard cleanup usually implies all geometry should be in the tree. 
-        // Let's stick to "Reference to UUID nonexistent" -> Error. 
-        // And "Cube referenced more than once" -> Error.
         
         return model;
     }
 
     private static void validateElement(ElementDto dto, ModelAst ast) {
-        if (dto.uuid == null) throw new ModelParseException("Element missing UUID", ast.lineOfKey("elements"), "/elements");
+        if (dto.uuid == null) {
+            throw new ModelParseException("Element missing UUID", ast.lineOfKey("elements"), "/elements");
+        }
         if (dto.from == null || dto.from.length != 3) {
             int line = dto.uuid != null ? ast.lineOfUuid(dto.uuid) : ast.lineOfKey("elements");
             throw new ModelParseException("Element missing 'from' coordinates", line, dto.uuid != null ? "/elements/" + dto.uuid : "/elements");
@@ -199,18 +203,8 @@ public class BlockbenchLoader {
             throw new ModelParseException("Element missing 'to' coordinates", line, dto.uuid != null ? "/elements/" + dto.uuid : "/elements");
         }
         
-        // Validation: from >= to
-        // Logic: if from.x > to.x, etc.
-        // Usually Blockbench enforces from < to, but sometimes they are equal (flat plane).
-        // Prompt says "from >= to" is error? Actually prompt says "from >= to" -> Exception.
-        // Wait, "from >= to" implies if ANY component is >= ? Or if the box has 0 or negative volume?
-        // Usually, from=0, to=1 is valid. from=1, to=0 is invalid. 
-        // If from=1, to=1 (size 0), it might be invisible. 
-        // Let's assume strict "from < to" for all axes is the requirement if "from >= to" is the failure condition.
-        // But usually planes have one dimension equal. e.g. from.y = 0, to.y = 0.
-        // If the prompt says "from >= to", I will interpret strict checking. 
-        // Let's assume it means if `from` is strictly greater than `to` on any axis.
-        
+        // Validation: from should be less than or equal to to
+        // Note: After coordinate conversion, this might flip, but we handle it by recalculating min/max
         if (dto.from[0] > dto.to[0] || dto.from[1] > dto.to[1] || dto.from[2] > dto.to[2]) {
              int line = dto.uuid != null ? ast.lineOfUuid(dto.uuid) : ast.lineOfKey("elements");
              throw new ModelParseException("Element 'from' coordinates must be less than or equal to 'to' coordinates. UUID: " + dto.uuid, line, dto.uuid != null ? "/elements/" + dto.uuid : "/elements");
@@ -218,13 +212,17 @@ public class BlockbenchLoader {
     }
 
     private static ModelNode parseNode(JsonObject json, Map<UUID, ModelCube> elementMap, Set<UUID> usedCubes, ModelAst ast) {
-        // Outliner does not define groups; only hierarchy. Do not enforce 'name'/'origin' here.
         String name = json.has("name") ? json.get("name").getAsString() : (json.has("uuid") ? json.get("uuid").getAsString() : "<group>");
+        
         Vector3f origin = new Vector3f(0, 0, 0);
         if (json.has("origin")) {
             JsonArray originArr = json.getAsJsonArray("origin");
             if (originArr != null && originArr.size() == 3) {
-                origin.set(originArr.get(0).getAsFloat(), originArr.get(1).getAsFloat(), originArr.get(2).getAsFloat());
+                origin.set(
+                    originArr.get(0).getAsFloat(), 
+                    originArr.get(1).getAsFloat(), 
+                    originArr.get(2).getAsFloat()
+                );
             }
         }
         
@@ -232,31 +230,46 @@ public class BlockbenchLoader {
         if (json.has("position")) {
             JsonArray posArr = json.getAsJsonArray("position");
             if (posArr.size() == 3) {
-                position.set(posArr.get(0).getAsFloat(), posArr.get(1).getAsFloat(), posArr.get(2).getAsFloat());
+                position.set(
+                    posArr.get(0).getAsFloat(), 
+                    posArr.get(1).getAsFloat(), 
+                    posArr.get(2).getAsFloat()
+                );
             }
         }
 
+        // Parse rotation (keep as-is, will be inverted in ModelInstance)
         Vector3f rotation = new Vector3f(0, 0, 0);
         if (json.has("rotation")) {
             JsonArray rotArr = json.getAsJsonArray("rotation");
             if (rotArr != null && rotArr.size() == 3) {
-                rotation.set(rotArr.get(0).getAsFloat(), rotArr.get(1).getAsFloat(), rotArr.get(2).getAsFloat());
+                rotation.set(
+                    rotArr.get(0).getAsFloat(), 
+                    rotArr.get(1).getAsFloat(), 
+                    rotArr.get(2).getAsFloat()
+                );
             }
         }
         
+        // Parse scale
         Vector3f scale = new Vector3f(1, 1, 1);
         if (json.has("scale")) {
              JsonElement scaleEl = json.get("scale");
              if (scaleEl.isJsonArray()) {
                  JsonArray scaleArr = scaleEl.getAsJsonArray();
                  if (scaleArr != null && scaleArr.size() == 3) {
-                     scale.set(scaleArr.get(0).getAsFloat(), scaleArr.get(1).getAsFloat(), scaleArr.get(2).getAsFloat());
+                     scale.set(
+                         scaleArr.get(0).getAsFloat(), 
+                         scaleArr.get(1).getAsFloat(), 
+                         scaleArr.get(2).getAsFloat()
+                     );
                  }
              }
         }
 
         ModelNode node = new ModelNode(name, origin, position, rotation, scale);
 
+        // Parse children
         if (json.has("children")) {
             JsonArray children = json.getAsJsonArray("children");
             for (JsonElement child : children) {

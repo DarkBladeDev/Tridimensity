@@ -3,7 +3,7 @@ package com.tridimensity.io.fix;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.tridimensity.exception.ModelParseException;
+
 import com.tridimensity.io.ast.ModelAst;
 
 import java.util.*;
