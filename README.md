@@ -6,7 +6,7 @@ It is platform-agnostic (works with Spigot, Paper, Fabric, or standalone Java ap
 
 ## 🚀 Features
 
-*   **Format Support**: Loads `Animated Java` or `Generic Model` JSON files exported from Blockbench.
+*   **Format Support**: Load `Generic Models` JSON files exported from Blockbench.
 *   **Scene Graph**: Full support for hierarchical parenting (Groups/Bones).
 *   **Strict Validation**: Fail-fast parser that rejects invalid models (missing pivots, duplicate UUIDs, inverted geometry).
 *   **Math Engine**: Built-in transformation engine using [JOML](https://github.com/JOML-CI/JOML) to compute World Matrices for every node.
@@ -15,27 +15,32 @@ It is platform-agnostic (works with Spigot, Paper, Fabric, or standalone Java ap
 
 ## 📦 Installation
 
-### Maven Local
-First, build and install the library to your local Maven repository:
+### JitPack
+First, add the jitpack repo in your project:
 
-```bash
-git clone https://github.com/your-repo/tridimensity.git
-cd tridimensity
-./gradlew publishToMavenLocal
-```
+[![](https://jitpack.io/v/DarkBladeDev/Tridimensity.svg)](https://jitpack.io/#DarkBladeDev/Tridimensity)
 
 ### Gradle (Kotlin DSL)
-Add `mavenLocal()` to your repositories and the dependency:
-
 ```kotlin
 repositories {
-    mavenLocal()
     mavenCentral()
+    maven { url = uri("https://jitpack.io") }
 }
 
 dependencies {
-    implementation("com.tridimensity:tridimensity:1.0.0")
+    implementation("com.tridimensity:tridimensity:VERSION")
 }
+```
+
+### Gradle (Groovy DSL)
+```groovy
+repositories {
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+		}
+dependencies {
+    implementation 'com.github.DarkBladeDev:Tridimensity:VERSION'
+	}
 ```
 
 ### Maven (`pom.xml`)
