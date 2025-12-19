@@ -140,12 +140,23 @@ public class BlockbenchLoader {
 
         Model model = new Model();
         JsonArray outlinerArray = root.getAsJsonArray("outliner");
-        
+
+        Map<String, JsonObject> groupMap = new HashMap<>();
+        if (root.has("groups")) {
+            JsonArray groupsArray = root.getAsJsonArray("groups");
+            for (JsonElement ge : groupsArray) {
+                JsonObject g = ge.getAsJsonObject();
+                if (g.has("uuid")) {
+                    groupMap.put(g.get("uuid").getAsString(), g);
+                }
+            }
+        }
+
         Set<UUID> usedCubes = new HashSet<>();
 
         for (JsonElement nodeJson : outlinerArray) {
             if (nodeJson.isJsonObject()) {
-                ModelNode node = parseNode(nodeJson.getAsJsonObject(), elementMap, usedCubes, ast);
+                ModelNode node = parseNode(nodeJson.getAsJsonObject(), elementMap, groupMap, usedCubes, ast);
                 model.addRoot(node);
             } else if (nodeJson.isJsonPrimitive() && nodeJson.getAsJsonPrimitive().isString()) {
                 // Allow root entries that are direct element UUIDs
@@ -211,88 +222,109 @@ public class BlockbenchLoader {
         }
     }
 
-    private static ModelNode parseNode(JsonObject json, Map<UUID, ModelCube> elementMap, Set<UUID> usedCubes, ModelAst ast) {
-        String name = json.has("name") ? json.get("name").getAsString() : (json.has("uuid") ? json.get("uuid").getAsString() : "<group>");
-        
+    private static ModelNode parseNode(JsonObject json, Map<UUID, ModelCube> elementMap, Map<String, JsonObject> groupMap, Set<UUID> usedCubes, ModelAst ast) {
+        JsonObject source = json;
+        String resolvedUuid = null;
+        boolean isRefOnly = false;
+        if (json.has("uuid") && !hasTransformFields(json)) {
+            resolvedUuid = json.get("uuid").getAsString();
+            JsonObject groupObj = groupMap.get(resolvedUuid);
+            if (groupObj == null) {
+                int line = ast.lineOfUuid(resolvedUuid);
+                throw new ModelParseException("Reference to nonexistent group UUID: " + resolvedUuid, line, "/groups/" + resolvedUuid);
+            }
+            source = groupObj;
+            isRefOnly = true;
+        }
+
+        String name = source.has("name") ? source.get("name").getAsString() : (source.has("uuid") ? source.get("uuid").getAsString() : "<group>");
+
         Vector3f origin = new Vector3f(0, 0, 0);
-        if (json.has("origin")) {
-            JsonArray originArr = json.getAsJsonArray("origin");
+        if (source.has("origin")) {
+            JsonArray originArr = source.getAsJsonArray("origin");
             if (originArr != null && originArr.size() == 3) {
                 origin.set(
-                    originArr.get(0).getAsFloat(), 
-                    originArr.get(1).getAsFloat(), 
+                    originArr.get(0).getAsFloat(),
+                    originArr.get(1).getAsFloat(),
                     originArr.get(2).getAsFloat()
                 );
             }
         }
-        
+
         Vector3f position = new Vector3f(0, 0, 0);
-        if (json.has("position")) {
-            JsonArray posArr = json.getAsJsonArray("position");
-            if (posArr.size() == 3) {
+        if (source.has("position")) {
+            JsonArray posArr = source.getAsJsonArray("position");
+            if (posArr != null && posArr.size() == 3) {
                 position.set(
-                    posArr.get(0).getAsFloat(), 
-                    posArr.get(1).getAsFloat(), 
+                    posArr.get(0).getAsFloat(),
+                    posArr.get(1).getAsFloat(),
                     posArr.get(2).getAsFloat()
                 );
             }
         }
 
-        // Parse rotation (keep as-is, will be inverted in ModelInstance)
         Vector3f rotation = new Vector3f(0, 0, 0);
-        if (json.has("rotation")) {
-            JsonArray rotArr = json.getAsJsonArray("rotation");
+        if (source.has("rotation")) {
+            JsonArray rotArr = source.getAsJsonArray("rotation");
             if (rotArr != null && rotArr.size() == 3) {
                 rotation.set(
-                    rotArr.get(0).getAsFloat(), 
-                    rotArr.get(1).getAsFloat(), 
+                    rotArr.get(0).getAsFloat(),
+                    rotArr.get(1).getAsFloat(),
                     rotArr.get(2).getAsFloat()
                 );
             }
         }
-        
-        // Parse scale
+
         Vector3f scale = new Vector3f(1, 1, 1);
-        if (json.has("scale")) {
-             JsonElement scaleEl = json.get("scale");
-             if (scaleEl.isJsonArray()) {
-                 JsonArray scaleArr = scaleEl.getAsJsonArray();
-                 if (scaleArr != null && scaleArr.size() == 3) {
-                     scale.set(
-                         scaleArr.get(0).getAsFloat(), 
-                         scaleArr.get(1).getAsFloat(), 
-                         scaleArr.get(2).getAsFloat()
-                     );
-                 }
-             }
+        if (source.has("scale")) {
+            JsonElement scaleEl = source.get("scale");
+            if (scaleEl.isJsonArray()) {
+                JsonArray scaleArr = scaleEl.getAsJsonArray();
+                if (scaleArr != null && scaleArr.size() == 3) {
+                    scale.set(
+                        scaleArr.get(0).getAsFloat(),
+                        scaleArr.get(1).getAsFloat(),
+                        scaleArr.get(2).getAsFloat()
+                    );
+                }
+            }
         }
 
         ModelNode node = new ModelNode(name, origin, position, rotation, scale);
 
-        // Parse children
+        JsonArray children = null;
         if (json.has("children")) {
-            JsonArray children = json.getAsJsonArray("children");
+            children = json.getAsJsonArray("children");
+        } else if (source.has("children")) {
+            children = source.getAsJsonArray("children");
+        }
+
+        if (children != null) {
             for (JsonElement child : children) {
                 if (child.isJsonObject()) {
-                    // It's a sub-group
-                    ModelNode childNode = parseNode(child.getAsJsonObject(), elementMap, usedCubes, ast);
-                    node.addChild(childNode);
+                    JsonObject childObj = child.getAsJsonObject();
+                    if (childObj.has("uuid") && !hasTransformFields(childObj)) {
+                        ModelNode childNode = parseNode(childObj, elementMap, groupMap, usedCubes, ast);
+                        node.addChild(childNode);
+                    } else {
+                        ModelNode childNode = parseNode(childObj, elementMap, groupMap, usedCubes, ast);
+                        node.addChild(childNode);
+                    }
                 } else if (child.isJsonPrimitive() && child.getAsJsonPrimitive().isString()) {
-                    // It's a cube UUID
                     String uuidStr = child.getAsString();
                     UUID uuid;
                     try {
                         uuid = UUID.fromString(uuidStr);
                     } catch (IllegalArgumentException e) {
-                         int line = ast.lineOfUuid(uuidStr);
-                         throw new ModelParseException("Invalid UUID format: " + uuidStr, line, "/outliner/" + uuidStr);
+                        int line = ast.lineOfUuid(uuidStr);
+                        throw new ModelParseException("Invalid UUID format: " + uuidStr, line, "/outliner/" + uuidStr);
                     }
 
                     if (!elementMap.containsKey(uuid)) {
                         int line = ast.lineOfUuid(uuidStr);
                         throw new ModelParseException("Reference to nonexistent cube UUID: " + uuid, line, "/outliner/" + uuidStr);
                     }
-                    
+
                     if (usedCubes.contains(uuid)) {
                         int line = ast.lineOfUuid(uuidStr);
                         throw new ModelParseException("Cube referenced more than once: " + uuid, line, "/outliner/" + uuidStr);
@@ -302,11 +334,15 @@ public class BlockbenchLoader {
                     node.addCube(cube);
                     usedCubes.add(uuid);
                 } else {
-                     throw new ModelParseException("Unknown child type in outliner: " + child, ast.lineOfKey("outliner"), "/outliner");
+                    throw new ModelParseException("Unknown child type in outliner: " + child, ast.lineOfKey("outliner"), "/outliner");
                 }
             }
         }
 
         return node;
+    }
+
+    private static boolean hasTransformFields(JsonObject json) {
+        return json.has("origin") || json.has("position") || json.has("rotation") || json.has("scale");
     }
 }

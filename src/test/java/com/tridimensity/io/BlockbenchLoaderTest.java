@@ -346,4 +346,42 @@ class BlockbenchLoaderTest {
             assertThrows(ModelParseException.class, () -> BlockbenchLoader.load(stream));
         }
     }
+
+    @Test
+    void testGroupsReferenceResolution() {
+        String json = """
+            {
+                "elements": [
+                    {
+                        "uuid": "00000000-0000-0000-0000-000000000001",
+                        "from": [0,0,0],
+                        "to": [16,16,16],
+                        "faces": {}
+                    }
+                ],
+                "groups": [
+                    {
+                        "uuid": "11111111-1111-1111-1111-111111111111",
+                        "name": "g1",
+                        "origin": [8, 0, 8],
+                        "rotation": [0, 45, 0],
+                        "children": ["00000000-0000-0000-0000-000000000001"]
+                    }
+                ],
+                "outliner": [
+                    { "uuid": "11111111-1111-1111-1111-111111111111" }
+                ]
+            }
+            """;
+
+        Model model = BlockbenchLoader.load(new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
+        assertNotNull(model);
+        assertEquals(1, model.getRoots().size());
+        ModelNode root = model.getRoots().get(0);
+        assertEquals("g1", root.getName());
+        assertEquals(new Vector3f(8,0,8), root.getOrigin());
+        assertEquals(45.0f, root.getRotation().y, 0.0001f);
+        assertEquals(1, root.getCubes().size());
+        assertEquals(UUID.fromString("00000000-0000-0000-0000-000000000001"), root.getCubes().get(0).getUuid());
+    }
 }
