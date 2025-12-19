@@ -72,9 +72,10 @@ public class BlockbenchLoader {
     }
 
     private static Model parse(JsonObject root, String raw) {
+        ModelAst ast = ModelAst.fromJson(root, raw);
         // 1. Parse Elements (Cubes)
         if (!root.has("elements")) {
-            throw new ModelParseException("Missing 'elements' array");
+            throw new ModelParseException("Missing 'elements' array", ast.lineOfKey("elements"), "/elements");
         }
         
         Map<UUID, ModelCube> elementMap = new HashMap<>();
@@ -84,7 +85,7 @@ public class BlockbenchLoader {
             ElementDto dto = gson.fromJson(el, ElementDto.class);
             JsonObject elObj = el.getAsJsonObject();
             if (elObj.has("origin")) {
-                int line = dto.uuid != null ? ModelAst.fromJson(root, raw).lineOfUuid(dto.uuid) : -1;
+                int line = dto.uuid != null ? ast.lineOfUuid(dto.uuid) : -1;
                 throw new ModelParseException("Element-level origin is not supported; use group origin", line, dto.uuid != null ? "/elements/" + dto.uuid : null);
             }
             if (elObj.has("rotation")) {
@@ -94,16 +95,17 @@ public class BlockbenchLoader {
                     float ry = ra.get(1).getAsFloat();
                     float rz = ra.get(2).getAsFloat();
                     if (Math.abs(rx) > 1e-6f || Math.abs(ry) > 1e-6f || Math.abs(rz) > 1e-6f) {
-                        int line = dto.uuid != null ? ModelAst.fromJson(root, raw).lineOfUuid(dto.uuid) : -1;
+                        int line = dto.uuid != null ? ast.lineOfUuid(dto.uuid) : -1;
                         throw new ModelParseException("Element-level transforms are not supported; use group rotation", line, dto.uuid != null ? "/elements/" + dto.uuid : null);
                     }
                 }
             }
-            validateElement(dto);
+            validateElement(dto, ast);
             
             UUID uuid = UUID.fromString(dto.uuid);
             if (elementMap.containsKey(uuid)) {
-                throw new ModelParseException("Duplicate element UUID: " + uuid);
+                int line = ast.lineOfUuid(uuid.toString());
+                throw new ModelParseException("Duplicate element UUID: " + uuid, line, "/elements/" + uuid);
             }
             
             Map<String, ModelFace> faces = new HashMap<>();
@@ -119,6 +121,7 @@ public class BlockbenchLoader {
             
             ModelCube cube = new ModelCube(
                 uuid,
+                dto.name,
                 new Vector3f(dto.from[0], dto.from[1], dto.from[2]),
                 new Vector3f(dto.to[0], dto.to[1], dto.to[2]),
                 faces
@@ -128,7 +131,7 @@ public class BlockbenchLoader {
 
         // 2. Parse Outliner (Hierarchy)
         if (!root.has("outliner")) {
-            throw new ModelParseException("Missing 'outliner' array");
+            throw new ModelParseException("Missing 'outliner' array", ast.lineOfKey("outliner"), "/outliner");
         }
 
         Model model = new Model();
@@ -137,15 +140,40 @@ public class BlockbenchLoader {
         Set<UUID> usedCubes = new HashSet<>();
 
         for (JsonElement nodeJson : outlinerArray) {
-            if (!nodeJson.isJsonObject()) {
-                throw new ModelParseException("Root nodes in outliner must be Groups (Objects), found: " + nodeJson);
+            if (nodeJson.isJsonObject()) {
+                ModelNode node = parseNode(nodeJson.getAsJsonObject(), elementMap, usedCubes, ast);
+                model.addRoot(node);
+            } else if (nodeJson.isJsonPrimitive() && nodeJson.getAsJsonPrimitive().isString()) {
+                // Allow root entries that are direct element UUIDs; create a synthetic container node
+                String uuidStr = nodeJson.getAsString();
+                UUID uuid;
+                try {
+                    uuid = UUID.fromString(uuidStr);
+                } catch (IllegalArgumentException e) {
+                    int line = ast.lineOfUuid(uuidStr);
+                    throw new ModelParseException("Invalid UUID format: " + uuidStr, line, "/outliner/" + uuidStr);
+                }
+
+                if (!elementMap.containsKey(uuid)) {
+                    int line = ast.lineOfUuid(uuidStr);
+                    throw new ModelParseException("Reference to nonexistent cube UUID: " + uuid, line, "/outliner/" + uuidStr);
+                }
+
+                ModelNode synthetic = new ModelNode("<outliner-root>", new org.joml.Vector3f(0,0,0), new org.joml.Vector3f(0,0,0), new org.joml.Vector3f(0,0,0), new org.joml.Vector3f(1,1,1));
+                synthetic.addCube(elementMap.get(uuid));
+                if (usedCubes.contains(uuid)) {
+                    int line = ast.lineOfUuid(uuidStr);
+                    throw new ModelParseException("Cube referenced more than once: " + uuid, line, "/outliner/" + uuidStr);
+                }
+                usedCubes.add(uuid);
+                model.addRoot(synthetic);
+            } else {
+                throw new ModelParseException("Unknown root entry type in outliner: " + nodeJson, ast.lineOfKey("outliner"), "/outliner");
             }
-            ModelNode node = parseNode(nodeJson.getAsJsonObject(), elementMap, usedCubes);
-            model.addRoot(node);
         }
 
         if (model.getRoots().isEmpty()) {
-            throw new ModelParseException("Model has no root nodes");
+            throw new ModelParseException("Model has no root nodes", ast.lineOfKey("outliner"), "/outliner");
         }
 
         // 3. Validate all cubes are used exactly once (Implied by strict logic, but let's check strict containment)
@@ -160,10 +188,16 @@ public class BlockbenchLoader {
         return model;
     }
 
-    private static void validateElement(ElementDto dto) {
-        if (dto.uuid == null) throw new ModelParseException("Element missing UUID");
-        if (dto.from == null || dto.from.length != 3) throw new ModelParseException("Element missing 'from' coordinates");
-        if (dto.to == null || dto.to.length != 3) throw new ModelParseException("Element missing 'to' coordinates");
+    private static void validateElement(ElementDto dto, ModelAst ast) {
+        if (dto.uuid == null) throw new ModelParseException("Element missing UUID", ast.lineOfKey("elements"), "/elements");
+        if (dto.from == null || dto.from.length != 3) {
+            int line = dto.uuid != null ? ast.lineOfUuid(dto.uuid) : ast.lineOfKey("elements");
+            throw new ModelParseException("Element missing 'from' coordinates", line, dto.uuid != null ? "/elements/" + dto.uuid : "/elements");
+        }
+        if (dto.to == null || dto.to.length != 3) {
+            int line = dto.uuid != null ? ast.lineOfUuid(dto.uuid) : ast.lineOfKey("elements");
+            throw new ModelParseException("Element missing 'to' coordinates", line, dto.uuid != null ? "/elements/" + dto.uuid : "/elements");
+        }
         
         // Validation: from >= to
         // Logic: if from.x > to.x, etc.
@@ -178,20 +212,21 @@ public class BlockbenchLoader {
         // Let's assume it means if `from` is strictly greater than `to` on any axis.
         
         if (dto.from[0] > dto.to[0] || dto.from[1] > dto.to[1] || dto.from[2] > dto.to[2]) {
-             throw new ModelParseException("Element 'from' coordinates must be less than or equal to 'to' coordinates. UUID: " + dto.uuid);
+             int line = dto.uuid != null ? ast.lineOfUuid(dto.uuid) : ast.lineOfKey("elements");
+             throw new ModelParseException("Element 'from' coordinates must be less than or equal to 'to' coordinates. UUID: " + dto.uuid, line, dto.uuid != null ? "/elements/" + dto.uuid : "/elements");
         }
     }
 
-    private static ModelNode parseNode(JsonObject json, Map<UUID, ModelCube> elementMap, Set<UUID> usedCubes) {
-        // Validate fields
-        if (!json.has("name")) throw new ModelParseException("Group missing 'name'");
-        if (!json.has("origin")) throw new ModelParseException("Group missing 'origin' (pivot)");
-        
-        String name = json.get("name").getAsString();
-        JsonArray originArr = json.getAsJsonArray("origin");
-        if (originArr.size() != 3) throw new ModelParseException("Origin must have 3 components");
-        
-        Vector3f origin = new Vector3f(originArr.get(0).getAsFloat(), originArr.get(1).getAsFloat(), originArr.get(2).getAsFloat());
+    private static ModelNode parseNode(JsonObject json, Map<UUID, ModelCube> elementMap, Set<UUID> usedCubes, ModelAst ast) {
+        // Outliner does not define groups; only hierarchy. Do not enforce 'name'/'origin' here.
+        String name = json.has("name") ? json.get("name").getAsString() : (json.has("uuid") ? json.get("uuid").getAsString() : "<group>");
+        Vector3f origin = new Vector3f(0, 0, 0);
+        if (json.has("origin")) {
+            JsonArray originArr = json.getAsJsonArray("origin");
+            if (originArr != null && originArr.size() == 3) {
+                origin.set(originArr.get(0).getAsFloat(), originArr.get(1).getAsFloat(), originArr.get(2).getAsFloat());
+            }
+        }
         
         Vector3f position = new Vector3f(0, 0, 0);
         if (json.has("position")) {
@@ -204,7 +239,7 @@ public class BlockbenchLoader {
         Vector3f rotation = new Vector3f(0, 0, 0);
         if (json.has("rotation")) {
             JsonArray rotArr = json.getAsJsonArray("rotation");
-            if (rotArr.size() == 3) {
+            if (rotArr != null && rotArr.size() == 3) {
                 rotation.set(rotArr.get(0).getAsFloat(), rotArr.get(1).getAsFloat(), rotArr.get(2).getAsFloat());
             }
         }
@@ -214,7 +249,7 @@ public class BlockbenchLoader {
              JsonElement scaleEl = json.get("scale");
              if (scaleEl.isJsonArray()) {
                  JsonArray scaleArr = scaleEl.getAsJsonArray();
-                 if (scaleArr.size() == 3) {
+                 if (scaleArr != null && scaleArr.size() == 3) {
                      scale.set(scaleArr.get(0).getAsFloat(), scaleArr.get(1).getAsFloat(), scaleArr.get(2).getAsFloat());
                  }
              }
@@ -227,7 +262,7 @@ public class BlockbenchLoader {
             for (JsonElement child : children) {
                 if (child.isJsonObject()) {
                     // It's a sub-group
-                    ModelNode childNode = parseNode(child.getAsJsonObject(), elementMap, usedCubes);
+                    ModelNode childNode = parseNode(child.getAsJsonObject(), elementMap, usedCubes, ast);
                     node.addChild(childNode);
                 } else if (child.isJsonPrimitive() && child.getAsJsonPrimitive().isString()) {
                     // It's a cube UUID
@@ -236,22 +271,25 @@ public class BlockbenchLoader {
                     try {
                         uuid = UUID.fromString(uuidStr);
                     } catch (IllegalArgumentException e) {
-                         throw new ModelParseException("Invalid UUID format: " + uuidStr);
+                         int line = ast.lineOfUuid(uuidStr);
+                         throw new ModelParseException("Invalid UUID format: " + uuidStr, line, "/outliner/" + uuidStr);
                     }
 
                     if (!elementMap.containsKey(uuid)) {
-                        throw new ModelParseException("Reference to nonexistent cube UUID: " + uuid);
+                        int line = ast.lineOfUuid(uuidStr);
+                        throw new ModelParseException("Reference to nonexistent cube UUID: " + uuid, line, "/outliner/" + uuidStr);
                     }
                     
                     if (usedCubes.contains(uuid)) {
-                        throw new ModelParseException("Cube referenced more than once: " + uuid);
+                        int line = ast.lineOfUuid(uuidStr);
+                        throw new ModelParseException("Cube referenced more than once: " + uuid, line, "/outliner/" + uuidStr);
                     }
 
                     ModelCube cube = elementMap.get(uuid);
                     node.addCube(cube);
                     usedCubes.add(uuid);
                 } else {
-                     throw new ModelParseException("Unknown child type in outliner: " + child);
+                     throw new ModelParseException("Unknown child type in outliner: " + child, ast.lineOfKey("outliner"), "/outliner");
                 }
             }
         }

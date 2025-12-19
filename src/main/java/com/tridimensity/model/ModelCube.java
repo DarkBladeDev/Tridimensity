@@ -12,13 +12,15 @@ import java.util.Map;
  * as per the specification. Rotations must happen at the Group (Node) level.</p>
  */
 public class ModelCube {
+    private final String name;
     private final UUID uuid;
     private final Vector3f from;
     private final Vector3f to;
     private final Map<String, ModelFace> faces; 
 
-    public ModelCube(UUID uuid, Vector3f from, Vector3f to, Map<String, ModelFace> faces) {
+    public ModelCube(UUID uuid, String name, Vector3f from, Vector3f to, Map<String, ModelFace> faces) {
         this.uuid = uuid;
+        this.name = name;
         this.from = from;
         this.to = to;
         this.faces = faces;
@@ -26,6 +28,10 @@ public class ModelCube {
 
     public UUID getUuid() {
         return uuid;
+    }
+
+    public String getName() {
+        return name;
     }
 
     public Vector3f getFrom() {
@@ -57,7 +63,8 @@ public class ModelCube {
     @Override
     public String toString() {
         return "ModelCube{" +
-                "uuid=" + uuid +
+                "name=" + name +
+                ", uuid=" + uuid +
                 ", from=" + from +
                 ", to=" + to +
                 '}';

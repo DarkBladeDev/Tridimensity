@@ -80,6 +80,18 @@ public class ModelAst {
         return line;
     }
 
+    public int lineOfKey(String key) {
+        if (raw == null || key == null) return -1;
+        String needle = "\"" + key + "\"";
+        int idx = raw.indexOf(needle);
+        if (idx < 0) return -1;
+        int line = 1;
+        for (int i = 0; i < idx; i++) {
+            if (raw.charAt(i) == '\n') line++;
+        }
+        return line;
+    }
+
     public JsonObject findParentGroupForElementUuid(String uuid) {
         for (JsonElement nodeEl : outliner()) {
             JsonObject found = findParentInGroup(nodeEl.getAsJsonObject(), uuid);
@@ -108,7 +120,9 @@ public class ModelAst {
         for (JsonElement el : elements()) {
             JsonObject obj = el.getAsJsonObject();
             if (hasNonZeroRotation(obj)) {
-                throw new ModelParseException("Element-level transforms are not supported; auto-fix failed");
+                String uuid = obj.has("uuid") ? obj.get("uuid").getAsString() : null;
+                int line = uuid != null ? lineOfUuid(uuid) : -1;
+                throw new ModelParseException("Element-level transforms are not supported; auto-fix failed", line, uuid != null ? "/elements/" + uuid : null);
             }
         }
     }

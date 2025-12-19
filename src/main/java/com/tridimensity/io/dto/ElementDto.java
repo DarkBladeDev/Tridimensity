@@ -3,6 +3,7 @@ package com.tridimensity.io.dto;
 import java.util.Map;
 
 public class ElementDto {
+    public String name;
     public String uuid;
     public float[] from;
     public float[] to;

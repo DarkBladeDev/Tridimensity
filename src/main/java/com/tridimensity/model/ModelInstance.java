@@ -67,39 +67,21 @@ public class ModelInstance {
         // Convert to blocks (Regla 7: Normalización previa)
         offset.mul(SCALE_FACTOR);
         
-        // Build Bone Matrix
-        // M_bone = M_parent_bone * T(offset) * R(rot) * S(scale)
-        // Regla 5: Orden T -> R -> S. (Aplicado aquí secuencialmente).
+        // Construcción correcta con pivot centrando la rotación
         Matrix4f boneMatrix = new Matrix4f(parentBoneMatrix);
-        
-        // T(offset)
         boneMatrix.translate(offset);
-        
-        // R(rotation) - Euler XYZ in degrees
-        // Regla 4: Rotaciones siempre locales. (Aplicado sobre la matriz ósea actual).
+        Vector3f pivotScaled = new Vector3f(piv).mul(SCALE_FACTOR);
+        boneMatrix.translate(pivotScaled);
         boneMatrix.rotateXYZ(
             (float) Math.toRadians(rot.x),
-            (float) Math.toRadians(-rot.y), // Invert Y to match Minecraft/Blockbench coordinate system (X->Z)
+            (float) Math.toRadians(-rot.y),
             (float) Math.toRadians(rot.z)
         );
-        
-        // S(scale)
         boneMatrix.scale(scl);
+        boneMatrix.translate(new Vector3f(pivotScaled).mul(-1f));
 
-        // Calculate Final Render Matrix for Geometry
-        // M_render = M_bone * T(-ChildPivot)
-        // Regla 2 y 3: Pivot no es posición y es invariante.
-        // T(-ChildPivot) compensa el hecho de que la geometría está definida en coordenadas globales.
-        // Al restar el pivote, llevamos la geometría al origen local del hueso.
-        
-        Matrix4f renderMatrix = new Matrix4f(boneMatrix);
-        
-        // T(-ChildPivot) scaled
-        Vector3f negPivot = new Vector3f(piv).mul(-SCALE_FACTOR);
-        renderMatrix.translate(negPivot);
-
-        // Store result
-        results.put(node, renderMatrix);
+        // Store final node matrix
+        results.put(node, boneMatrix);
 
         // Recurse using the Bone Matrix
         for (ModelNode child : node.getChildren()) {

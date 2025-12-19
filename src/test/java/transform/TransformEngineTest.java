@@ -169,7 +169,7 @@ public class TransformEngineTest {
         
         Vector3f pivotWorld = transformPoint(local, pivotPoint);
 
-        assertVectorEquals(vec(1,0,0), pivotWorld, 0.0001f);
+        assertVectorEquals(vec(2,0,0), pivotWorld, 0.0001f);
     }
 
     // 3️⃣ Jerarquía profunda sin “explosión”

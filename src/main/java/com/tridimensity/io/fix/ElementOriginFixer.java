@@ -27,43 +27,11 @@ public class ElementOriginFixer implements ModelAutoFixer {
             }
 
             if (hasOrigin && hasRot) {
-                String uuid = elem.has("uuid") ? elem.get("uuid").getAsString() : null;
-                JsonObject parent = uuid != null ? model.findParentGroupForElementUuid(uuid) : null;
-                if (parent == null) {
-                    int line = uuid != null ? model.lineOfUuid(uuid) : -1;
-                    throw new ModelParseException("Element-level origin found but element has no parent group: " + model.elementName(elem), line, uuid != null ? "/elements/" + uuid : null);
-                }
-                rotatedByGroup.computeIfAbsent(parent, k -> new ArrayList<>()).add(elem);
+                // Do not move origin to group; leave it for ElementRotationFixer to consume/remove
             }
         }
 
-        for (Map.Entry<JsonObject, List<JsonObject>> entry : rotatedByGroup.entrySet()) {
-            JsonObject group = entry.getKey();
-            List<JsonObject> elems = entry.getValue();
-
-            float[] unique = null;
-            for (JsonObject e : elems) {
-                float[] o = readOrigin(e);
-                if (unique == null) {
-                    unique = o;
-                } else if (!approxEquals(unique, o)) {
-                    int line = model.lineOfGroupName(model.groupName(group));
-                    throw new ModelParseException("Auto-fix cannot resolve multiple element origins in group '" + model.groupName(group) + "'", line, "/outliner/" + model.groupName(group));
-                }
-            }
-
-            if (unique != null) {
-                writeOrigin(group, unique);
-                for (JsonObject e : elems) {
-                    e.remove("origin");
-                    report.warn(String.format(
-                        "Auto-fix: moved origin [%.2f, %.2f, %.2f] from element '%s' to group '%s'",
-                        unique[0], unique[1], unique[2],
-                        model.elementName(e), model.groupName(group)
-                    ));
-                }
-            }
-        }
+        // No group modifications
     }
 
     private static float[] readOrigin(JsonObject obj) {
