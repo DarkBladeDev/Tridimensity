@@ -28,7 +28,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.tridimensity:tridimensity:VERSION")
+    implementation("com.github.DarkBladeDev:Tridimensity:VERSION")
 }
 ```
 
@@ -46,8 +46,8 @@ dependencies {
 ### Maven (`pom.xml`)
 ```xml
 <dependency>
-    <groupId>com.tridimensity</groupId>
-    <artifactId>tridimensity</artifactId>
+    <groupId>com.github.DarkBladeDev</groupId>
+    <artifactId>Tridimensity</artifactId>
     <version>VERSION</version>
 </dependency>
 ```
