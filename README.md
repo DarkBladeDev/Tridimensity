@@ -48,7 +48,7 @@ dependencies {
 <dependency>
     <groupId>com.tridimensity</groupId>
     <artifactId>tridimensity</artifactId>
-    <version>1.0.0</version>
+    <version>VERSION</version>
 </dependency>
 ```
 
