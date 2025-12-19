@@ -48,6 +48,18 @@ public class ModelInstance {
         return results;
     }
 
+    public Map<ModelNode, Vector3f> computeWorldPivotPositions() {
+        Map<ModelNode, Matrix4f> world = computeWorldTransforms();
+        Map<ModelNode, Vector3f> pivots = new HashMap<>();
+        for (Map.Entry<ModelNode, Matrix4f> e : world.entrySet()) {
+            Vector3f pivotScaled = new Vector3f(e.getKey().getOrigin()).mul(SCALE_FACTOR);
+            Vector3f worldPivot = new Vector3f(pivotScaled);
+            e.getValue().transformPosition(worldPivot);
+            pivots.put(e.getKey(), worldPivot);
+        }
+        return pivots;
+    }
+
     /**
      * Recursively computes world matrices for a node and its children.
      * 
