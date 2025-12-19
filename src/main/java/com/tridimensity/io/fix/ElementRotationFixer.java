@@ -5,7 +5,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.tridimensity.exception.ModelParseException;
 import com.tridimensity.io.ast.ModelAst;
-import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 public class ElementRotationFixer implements ModelAutoFixer {
