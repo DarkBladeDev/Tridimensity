@@ -43,6 +43,10 @@ public class ModelNode {
         return name;
     }
 
+    public UUID getUuid() {
+        return uuid;
+    }
+
     /**
      * @return The pivot point (origin) in Blockbench coordinates (pixels).
      */

@@ -225,7 +225,6 @@ public class BlockbenchLoader {
     private static ModelNode parseNode(JsonObject json, Map<UUID, ModelCube> elementMap, Map<String, JsonObject> groupMap, Set<UUID> usedCubes, ModelAst ast) {
         JsonObject source = json;
         String resolvedUuid = null;
-        boolean isRefOnly = false;
         if (json.has("uuid") && !hasTransformFields(json)) {
             resolvedUuid = json.get("uuid").getAsString();
             JsonObject groupObj = groupMap.get(resolvedUuid);
@@ -234,7 +233,6 @@ public class BlockbenchLoader {
                 throw new ModelParseException("Reference to nonexistent group UUID: " + resolvedUuid, line, "/groups/" + resolvedUuid);
             }
             source = groupObj;
-            isRefOnly = true;
         }
 
         String name = source.has("name") ? source.get("name").getAsString() : (source.has("uuid") ? source.get("uuid").getAsString() : "<group>");
