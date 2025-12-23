@@ -384,4 +384,36 @@ class BlockbenchLoaderTest {
         assertEquals(1, root.getCubes().size());
         assertEquals(UUID.fromString("00000000-0000-0000-0000-000000000001"), root.getCubes().get(0).getUuid());
     }
+
+    @Test
+    void testElementFromToAutoOrder() {
+        String json = """
+            {
+                "elements": [
+                    {
+                        "uuid": "00000000-0000-0000-0000-000000000002",
+                        "from": [10, 2, 5],
+                        "to": [0, 0, 10],
+                        "faces": {}
+                    }
+                ],
+                "outliner": [
+                    {
+                        "name": "root",
+                        "origin": [0,0,0],
+                        "children": ["00000000-0000-0000-0000-000000000002"]
+                    }
+                ]
+            }
+            """;
+        Model model = BlockbenchLoader.load(new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
+        assertNotNull(model);
+        var cube = model.getRoots().get(0).getCubes().get(0);
+        assertEquals(0.0f, cube.getFrom().x, 1e-6f);
+        assertEquals(0.0f, cube.getFrom().y, 1e-6f);
+        assertEquals(5.0f, cube.getFrom().z, 1e-6f);
+        assertEquals(10.0f, cube.getTo().x, 1e-6f);
+        assertEquals(2.0f, cube.getTo().y, 1e-6f);
+        assertEquals(10.0f, cube.getTo().z, 1e-6f);
+    }
 }

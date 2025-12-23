@@ -103,6 +103,25 @@ public class BlockbenchLoader {
                 }
             }
             
+            // Auto-order element coordinates so that from <= to per axis
+            if (dto.from != null && dto.to != null && dto.from.length == 3 && dto.to.length == 3) {
+                float fx = dto.from[0], fy = dto.from[1], fz = dto.from[2];
+                float tx = dto.to[0], ty = dto.to[1], tz = dto.to[2];
+                boolean swapped = fx > tx || fy > ty || fz > tz;
+                if (swapped) {
+                    float minX = Math.min(fx, tx);
+                    float minY = Math.min(fy, ty);
+                    float minZ = Math.min(fz, tz);
+                    float maxX = Math.max(fx, tx);
+                    float maxY = Math.max(fy, ty);
+                    float maxZ = Math.max(fz, tz);
+                    dto.from = new float[] {minX, minY, minZ};
+                    dto.to   = new float[] {maxX, maxY, maxZ};
+                    String id = dto.uuid != null ? dto.uuid : ast.elementName(elObj);
+                    log.warn("Auto-fix: normalized element bounds (from/to) for '{}'", id);
+                }
+            }
+
             validateElement(dto, ast);
             
             UUID uuid = UUID.fromString(dto.uuid);
