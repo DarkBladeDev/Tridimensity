@@ -15,6 +15,7 @@ import com.tridimensity.model.Model;
 import com.tridimensity.model.ModelCube;
 import com.tridimensity.model.ModelFace;
 import com.tridimensity.model.ModelNode;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +48,7 @@ public class BlockbenchLoader {
         try {
             String raw = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
             JsonObject root = JsonParser.parseString(raw).getAsJsonObject();
-            prepare(root, options, raw);
+            //prepare(root, options, raw);
             return parse(root, raw);
         } catch (Exception e) {
             if (e instanceof ModelParseException) {
@@ -142,12 +143,31 @@ public class BlockbenchLoader {
                 }
             }
             
+            Vector3f center = new Vector3f(from).add(to).mul(0.5f);
+            Vector3f localOffset = new Vector3f(center).mul(1f/16f);
+            Vector3f localScale = new Vector3f(to).sub(from).mul(1f/16f);
+
+            Quaternionf localRotation = readRotationQuaternion(elObj);
+
+            Vector3f pivot = new Vector3f(0,0,0);
+            if (elObj.has("origin")) {
+                JsonArray oa = elObj.getAsJsonArray("origin");
+                if (oa != null && oa.size() == 3) {
+                    pivot.set(oa.get(0).getAsFloat(), oa.get(1).getAsFloat(), oa.get(2).getAsFloat());
+                }
+            }
+            pivot.mul(1f/16f);
+
             ModelCube cube = new ModelCube(
                 uuid,
                 dto.name,
                 from,
                 to,
-                faces
+                faces,
+                localOffset,
+                localScale,
+                localRotation,
+                pivot
             );
             elementMap.put(uuid, cube);
         }
@@ -307,7 +327,12 @@ public class BlockbenchLoader {
             }
         }
 
-        ModelNode node = new ModelNode(name, origin, position, rotation, scale);
+        Vector3f pivotBlocks = new Vector3f(origin).mul(1f/16f);
+        Vector3f localOffset = new Vector3f(position).mul(1f/16f);
+        Vector3f localScale = new Vector3f(scale);
+        Quaternionf localRotation = readRotationQuaternion(source);
+
+        ModelNode node = new ModelNode(name, origin, position, rotation, scale, pivotBlocks, localOffset, localScale, localRotation);
 
         JsonArray children = null;
         if (json.has("children")) {
@@ -361,5 +386,24 @@ public class BlockbenchLoader {
 
     private static boolean hasTransformFields(JsonObject json) {
         return json.has("origin") || json.has("position") || json.has("rotation") || json.has("scale");
+    }
+
+    private static Quaternionf readRotationQuaternion(JsonObject obj) {
+        Quaternionf q = new Quaternionf().identity();
+        if (obj.has("rotation")) {
+            JsonArray rotArr = obj.getAsJsonArray("rotation");
+            if (rotArr != null && rotArr.size() == 3) {
+                float rx = rotArr.get(0).getAsFloat();
+                float ry = rotArr.get(1).getAsFloat();
+                float rz = rotArr.get(2).getAsFloat();
+                Quaternionf qx = new Quaternionf().rotateXYZ((float)Math.toRadians(rx), 0f, 0f);
+                Quaternionf qy = new Quaternionf().rotateXYZ(0f, (float)Math.toRadians(ry), 0f);
+                Quaternionf qz = new Quaternionf().rotateXYZ(0f, 0f, (float)Math.toRadians(rz));
+                q.set(qx);
+                q.mul(qy);
+                q.mul(qz);
+            }
+        }
+        return q;
     }
 }

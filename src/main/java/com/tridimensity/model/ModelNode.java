@@ -1,32 +1,40 @@
 package com.tridimensity.model;
 
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Represents a Group in the Blockbench Outliner.
- * This is the primary unit of transformation (rotation/scale).
- */
 public class ModelNode {
     private final String name;
-    private final UUID uuid; // Groups also have UUIDs in newer Blockbench versions, but strictly we might just use name. 
-                             // We'll generate one or use name if not present.
-    private final Vector3f origin; // Pivot point
-    private final Vector3f position; // Translation offset (optional, default 0)
-    private final Vector3f rotation; // Euler angles in degrees
-    private final Vector3f scale;    // Scale (optional, default 1)
+    private final UUID uuid;
+    private final Vector3f origin;
+    private final Vector3f position;
+    private final Vector3f rotation;
+    private final Vector3f scale;
+    private final Vector3f pivot;
+    private final Vector3f localOffset;
+    private final Vector3f localScale;
+    private final Quaternionf localRotation;
     private final List<ModelNode> children;
     private final List<ModelCube> cubes;
 
     public ModelNode(String name, Vector3f origin, Vector3f position, Vector3f rotation, Vector3f scale) {
+        this(name, origin, position, rotation, scale, new Vector3f(0,0,0), new Vector3f(0,0,0), new Vector3f(1,1,1), new Quaternionf().identity());
+    }
+
+    public ModelNode(String name, Vector3f origin, Vector3f position, Vector3f rotation, Vector3f scale, Vector3f pivot, Vector3f localOffset, Vector3f localScale, Quaternionf localRotation) {
         this.name = name;
-        this.uuid = UUID.randomUUID(); // Internal ID
+        this.uuid = UUID.randomUUID();
         this.origin = origin != null ? origin : new Vector3f(0, 0, 0);
         this.position = position != null ? position : new Vector3f(0, 0, 0);
         this.rotation = rotation != null ? rotation : new Vector3f(0, 0, 0);
         this.scale = scale != null ? scale : new Vector3f(1, 1, 1);
+        this.pivot = pivot != null ? pivot : new Vector3f(0,0,0);
+        this.localOffset = localOffset != null ? localOffset : new Vector3f(0,0,0);
+        this.localScale = localScale != null ? localScale : new Vector3f(1,1,1);
+        this.localRotation = localRotation != null ? localRotation : new Quaternionf().identity();
         this.children = new ArrayList<>();
         this.cubes = new ArrayList<>();
     }
@@ -47,9 +55,6 @@ public class ModelNode {
         return uuid;
     }
 
-    /**
-     * @return The pivot point (origin) in Blockbench coordinates (pixels).
-     */
     public Vector3f getOrigin() {
         return new Vector3f(origin);
     }
@@ -58,15 +63,28 @@ public class ModelNode {
         return new Vector3f(position);
     }
 
-    /**
-     * @return Rotation in degrees (Euler XYZ).
-     */
     public Vector3f getRotation() {
         return new Vector3f(rotation);
     }
 
     public Vector3f getScale() {
         return new Vector3f(scale);
+    }
+
+    public Vector3f getPivot() {
+        return new Vector3f(pivot);
+    }
+
+    public Vector3f getLocalOffset() {
+        return new Vector3f(localOffset);
+    }
+
+    public Vector3f getLocalScale() {
+        return new Vector3f(localScale);
+    }
+
+    public Quaternionf getLocalRotation() {
+        return new Quaternionf(localRotation);
     }
 
     public List<ModelNode> getChildren() {
